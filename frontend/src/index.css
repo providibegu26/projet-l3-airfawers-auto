@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+/* Animation pour les notifications modales */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.modal-notification {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Animation pour les badges urgents */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.urgent-pulse {
+  animation: pulse 2s infinite;
+}
