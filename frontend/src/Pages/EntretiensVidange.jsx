@@ -4,10 +4,9 @@ import { FaArrowLeft, FaFilePdf } from 'react-icons/fa';
 import MaintenanceTable from '../components/Entretiens/MaintenanceTable';
 import ToastNotification from '../components/UI/ToastNotification';
 import { 
-  fetchVehicles, 
-  calculateMaintenanceStats, 
+  fetchVehicles,
+  getNonUrgentMaintenance, 
   formatMaintenanceData,
-  validateMaintenance,
   calculateFleetAverage,
   calculateMaintenanceForVehicle
 } from '../services/maintenanceService';
@@ -38,84 +37,21 @@ const EntretiensVidange = () => {
 
   // Recalculer la liste à chaque changement de véhicules
   useEffect(() => {
-    const vidangeMaintenance = calculateMaintenanceStats(vehicles, 'vidange');
+    console.log('🔄 Recalcul des entretiens vidange avec', vehicles.length, 'véhicules');
+    const vidangeMaintenance = getNonUrgentMaintenance(vehicles, 'vidange');
     const formattedData = formatMaintenanceData(vidangeMaintenance);
     setMaintenanceData(formattedData);
+    console.log('✅ Entretiens vidange calculés:', formattedData.length, 'entretiens');
+    console.log('📋 Entretiens vidange:', formattedData.map(item => ({
+      vehicule: item.immatriculation,
+      joursRestants: item.joursRestants,
+      prochainKm: item.prochainKm
+    })));
   }, [vehicles]);
 
   const handleExportPDF = () => {
     // Logique d'export PDF
     console.log('Export PDF pour entretiens de vidange');
-  };
-
-  // Valider un entretien de vidange
-  const handleMaintenanceValidation = async (vehiclePlate, maintenanceType) => {
-    try {
-      // Trouver le véhicule
-      const vehicle = vehicles.find(v => v.immatriculation === vehiclePlate);
-      if (!vehicle) {
-        setNotification({
-          message: 'Véhicule non trouvé',
-          type: 'error'
-        });
-        return;
-      }
-
-      // Valider l'entretien et l'enregistrer dans l'historique
-      const updatedVehicle = await validateMaintenance(vehicle, maintenanceType);
-      
-      console.log('🔧 Validation entretien:', maintenanceType);
-      console.log('🚗 Véhicule avant validation:', vehicle);
-      console.log('✅ Véhicule après validation:', updatedVehicle);
-      console.log('📊 Nouvelles estimations vidange:', {
-        nextThreshold: updatedVehicle.vidangeNextThreshold,
-        kmRemaining: updatedVehicle.vidangeKmRemaining,
-        weeksRemaining: updatedVehicle.vidangeWeeksRemaining,
-        daysRemaining: updatedVehicle.vidangeDaysRemaining
-      });
-      
-      // Mettre à jour le véhicule dans la liste
-      const updatedVehicles = vehicles.map(v =>
-        v.immatriculation === vehiclePlate ? { ...updatedVehicle } : { ...v }
-      );
-      setVehicles([...updatedVehicles]);
-      
-      // Recalculer immédiatement la liste des entretiens avec les véhicules mis à jour
-      // Utiliser directement les véhicules mis à jour pour éviter les problèmes de référence
-      const fleetAverage = calculateFleetAverage(updatedVehicles);
-      const vidangeMaintenance = [];
-      
-      updatedVehicles.forEach(vehicleInList => {
-        // Utiliser le véhicule mis à jour si c'est celui qu'on vient de valider
-        const vehicleToUse = vehicleInList.immatriculation === vehiclePlate ? updatedVehicle : vehicleInList;
-        const maintenance = calculateMaintenanceForVehicle(vehicleToUse, fleetAverage);
-        if (maintenance && maintenance.vidange) {
-          vidangeMaintenance.push({
-            vehicle: vehicleToUse, // Utiliser le véhicule avec le bon kilométrage
-            maintenance: maintenance.vidange, // Utiliser les nouvelles données d'entretien
-            type: 'vidange'
-          });
-        }
-      });
-      
-      const formattedData = formatMaintenanceData(vidangeMaintenance);
-      setMaintenanceData(formattedData);
-      
-      console.log('Nouveau véhicule après validation:', updatedVehicle);
-      console.log('Nouvelle liste d\'entretiens:', formattedData);
-
-      // Notification de succès
-      setNotification({
-        message: `Entretien ${maintenanceType} validé pour ${vehiclePlate}. Nouvelle estimation calculée.`,
-        type: 'success'
-      });
-    } catch (error) {
-      console.error('Erreur lors de la validation:', error);
-      setNotification({
-        message: error.message || 'Erreur lors de la validation de l\'entretien',
-        type: 'error'
-      });
-    }
   };
 
   if (loading) {
@@ -166,10 +102,17 @@ const EntretiensVidange = () => {
       </div>
 
       <div className="bg-white rounded-xl shadow">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-800">Entretiens de Vidange</h2>
+            <div className="text-sm text-gray-500">
+              <span className="text-orange-600 font-medium">⚠️</span> Les entretiens urgents (≤ 7 jours) sont gérés sur la page des entretiens urgents
+            </div>
+          </div>
+        </div>
         <MaintenanceTable 
           data={maintenanceData}
-          title="Entretiens de Vidange"
-          onComplete={handleMaintenanceValidation}
+          title=""
         />
       </div>
     </div>

@@ -7,7 +7,8 @@ import {
   calculateFleetAverage, 
   calculateMaintenanceStats, 
   getUrgentMaintenance,
-  updateVehicleMileage
+  updateVehicleMileage,
+  refreshMaintenanceEstimations
 } from '../services/maintenanceService';
 
 const Entretiens = () => {
@@ -55,20 +56,9 @@ const Entretiens = () => {
       // Appel API pour sauvegarder en base
       await updateVehicleMileage(vehiclePlate, newMileage, weeklyKm);
 
-      // Mettre à jour localement
-      setVehicles(prevVehicles => 
-        prevVehicles.map(vehicle => 
-          vehicle.immatriculation === vehiclePlate 
-            ? { 
-                ...vehicle, 
-                currentMileage: newMileage,
-                kilometrage: newMileage, // Mettre à jour aussi le champ kilometrage
-                weeklyKm: isNewVehicle ? calculateFleetAverage(vehicles) : weeklyKm,
-                lastMileageUpdate: new Date().toISOString() // Enregistrer la date de mise à jour
-              }
-            : vehicle
-        )
-      );
+      // Forcer le recalcul des estimations en rechargeant depuis le serveur
+      const updatedVehicles = await refreshMaintenanceEstimations();
+      setVehicles(updatedVehicles);
 
       showNotification('Kilométrage mis à jour avec succès', 'success');
 

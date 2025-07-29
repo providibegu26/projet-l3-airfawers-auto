@@ -281,20 +281,20 @@ export const VehiclesPage = () => {
             <FaFilePdf className="mr-2" />
             Exporter la liste
           </button>
-          <button 
-            onClick={() => setShowAddModal(true)}
+        <button 
+          onClick={() => setShowAddModal(true)}
             className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md flex items-center text-sm"
-          >
-            <i className="fas fa-plus mr-2"></i> Ajouter un véhicule
-          </button>
+        >
+          <i className="fas fa-plus mr-2"></i> Ajouter un véhicule
+        </button>
         </div>
       </div>
 
       <div id="vehicle-table-pdf">
-        <VehicleTable 
+      <VehicleTable 
           vehicles={paginatedVehicles} 
-          onRowClick={setSelectedVehicle}
-          onAddVehicle={() => setShowAddModal(true)}
+        onRowClick={setSelectedVehicle}
+        onAddVehicle={() => setShowAddModal(true)}
           onUpdateVehicle={handleUpdateVehicle}
           onDeleteVehicle={handleDeleteVehicle}
           onAssignDriver={handleAssignDriver}
@@ -350,7 +350,7 @@ export const VehiclesPage = () => {
         title={successModal.title}
         message={successModal.message}
         details={successModal.details}
-      />
+        />
     </main>
         </div>
       </div>

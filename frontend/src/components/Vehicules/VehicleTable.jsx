@@ -98,7 +98,7 @@ export const VehicleTable = ({ vehicles, onUpdateVehicle, onDeleteVehicle, onAss
         onAssign={async (driverId) => {
           try {
             await onAssignDriver(modalState.assign.vehicle.id, driverId);
-            handleCloseModals();
+          handleCloseModals();
           } catch (error) {
             console.error('Erreur assignation:', error);
           }

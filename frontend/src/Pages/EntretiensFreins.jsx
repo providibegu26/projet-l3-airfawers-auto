@@ -4,9 +4,8 @@ import { FaArrowLeft, FaFilePdf } from 'react-icons/fa';
 import MaintenanceTable from '../components/Entretiens/MaintenanceTable';
 import { 
   fetchVehicles,
-  calculateMaintenanceStats, 
+  getNonUrgentMaintenance, 
   formatMaintenanceData,
-  validateMaintenance,
   calculateFleetAverage,
   calculateMaintenanceForVehicle
 } from '../services/maintenanceService';
@@ -38,74 +37,16 @@ const EntretiensFreins = () => {
 
   // Recalculer la liste à chaque changement de véhicules
   useEffect(() => {
-    const freinsMaintenance = calculateMaintenanceStats(vehicles, 'freins');
+    console.log('🔄 Recalcul des entretiens freins avec', vehicles.length, 'véhicules');
+    const freinsMaintenance = getNonUrgentMaintenance(vehicles, 'freins');
     const formattedData = formatMaintenanceData(freinsMaintenance);
     setMaintenanceData(formattedData);
+    console.log('✅ Entretiens freins calculés:', formattedData.length, 'entretiens');
   }, [vehicles]);
 
   const handleExportPDF = () => {
     // Logique d'export PDF
     console.log('Export PDF pour entretiens de freins');
-  };
-
-  // Valider un entretien de freins
-  const handleMaintenanceValidation = async (vehiclePlate, maintenanceType) => {
-    try {
-      // Trouver le véhicule
-      const vehicle = vehicles.find(v => v.immatriculation === vehiclePlate);
-      if (!vehicle) {
-        setNotification({
-          message: 'Véhicule non trouvé',
-          type: 'error'
-        });
-        return;
-      }
-
-      // Valider l'entretien et l'enregistrer dans l'historique
-      const updatedVehicle = await validateMaintenance(vehicle, maintenanceType);
-      
-      // Mettre à jour le véhicule dans la liste
-      const updatedVehicles = vehicles.map(v =>
-        v.immatriculation === vehiclePlate ? { ...updatedVehicle } : { ...v }
-      );
-      setVehicles([...updatedVehicles]);
-      
-      // Recalculer immédiatement la liste des entretiens avec les véhicules mis à jour
-      // Utiliser directement les véhicules mis à jour pour éviter les problèmes de référence
-      const fleetAverage = calculateFleetAverage(updatedVehicles);
-      const freinsMaintenance = [];
-      
-      updatedVehicles.forEach(vehicleInList => {
-        // Utiliser le véhicule mis à jour si c'est celui qu'on vient de valider
-        const vehicleToUse = vehicleInList.immatriculation === vehiclePlate ? updatedVehicle : vehicleInList;
-        const maintenance = calculateMaintenanceForVehicle(vehicleToUse, fleetAverage);
-        if (maintenance && maintenance.freins) {
-          freinsMaintenance.push({
-            vehicle: vehicleToUse, // Utiliser le véhicule avec le bon kilométrage
-            maintenance: maintenance.freins, // Utiliser les nouvelles données d'entretien
-            type: 'freins'
-          });
-        }
-      });
-      
-      const formattedData = formatMaintenanceData(freinsMaintenance);
-      setMaintenanceData(formattedData);
-      
-      console.log('Nouveau véhicule après validation:', updatedVehicle);
-      console.log('Nouvelle liste d\'entretiens:', formattedData);
-
-      // Notification de succès
-      setNotification({
-        message: `Entretien ${maintenanceType} validé pour ${vehiclePlate}. Nouvelle estimation calculée.`,
-        type: 'success'
-      });
-    } catch (error) {
-      console.error('Erreur lors de la validation:', error);
-      setNotification({
-        message: error.message || 'Erreur lors de la validation de l\'entretien',
-        type: 'error'
-      });
-    }
   };
 
   if (loading) {
@@ -147,10 +88,17 @@ const EntretiensFreins = () => {
       </div>
 
       <div className="bg-white rounded-xl shadow">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-800">Entretiens de Freins</h2>
+            <div className="text-sm text-gray-500">
+              <span className="text-orange-600 font-medium">⚠️</span> Les entretiens urgents (≤ 7 jours) sont gérés sur la page des entretiens urgents
+            </div>
+          </div>
+        </div>
         <MaintenanceTable 
           data={maintenanceData}
-          title="Entretiens de Freins"
-          onComplete={handleMaintenanceValidation}
+          title=""
         />
       </div>
       {notification && <ToastNotification message={notification.message} type={notification.type} />}

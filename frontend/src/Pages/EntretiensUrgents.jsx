@@ -2,13 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaArrowLeft, FaFilePdf } from 'react-icons/fa';
 import MaintenanceTable from '../components/Entretiens/MaintenanceTable';
+import ConfirmationModal from '../components/UI/ConfirmationModal';
 import { 
   fetchVehicles,
   getUrgentMaintenance, 
   formatMaintenanceData,
   validateMaintenance,
   calculateFleetAverage,
-  calculateMaintenanceForVehicle
+  calculateMaintenanceForVehicle,
+  refreshMaintenanceEstimations,
+  forceGlobalRecalculation
 } from '../services/maintenanceService';
 import ToastNotification from '../components/UI/ToastNotification';
 
@@ -19,6 +22,8 @@ const EntretiensUrgents = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [notification, setNotification] = useState(null);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [pendingValidation, setPendingValidation] = useState(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -50,66 +55,114 @@ const EntretiensUrgents = () => {
 
   // Valider un entretien urgent
   const handleMaintenanceValidation = async (vehiclePlate, maintenanceType) => {
+    console.log('🚀 Demande de validation:', { vehiclePlate, maintenanceType });
+    
+    // Stocker les informations de validation en attente
+    setPendingValidation({ vehiclePlate, maintenanceType });
+    setShowConfirmation(true);
+    
+    console.log('✅ Modal de confirmation ouvert');
+  };
+
+  // Confirmer la validation
+  const confirmValidation = async () => {
+    console.log('🔧 confirmValidation appelée');
+    
+    if (!pendingValidation) {
+      console.error('❌ Aucune validation en attente');
+      return;
+    }
+
     try {
+      console.log('🔧 Confirmation de validation...', pendingValidation);
+      
       // Trouver le véhicule
-      const vehicle = vehicles.find(v => v.immatriculation === vehiclePlate);
+      const vehicle = vehicles.find(v => v.immatriculation === pendingValidation.vehiclePlate);
       if (!vehicle) {
+        console.error('❌ Véhicule non trouvé:', pendingValidation.vehiclePlate);
+        console.log('📋 Véhicules disponibles:', vehicles.map(v => v.immatriculation));
         setNotification({
+          type: 'error',
           message: 'Véhicule non trouvé',
-          type: 'error'
+          isVisible: true
         });
         return;
       }
 
-      // Valider l'entretien et l'enregistrer dans l'historique
-      const updatedVehicle = await validateMaintenance(vehicle, maintenanceType);
+      console.log('✅ Véhicule trouvé:', vehicle);
+
+      // 1. Valider l'entretien
+      const validationData = {
+        vehiculeId: vehicle.id,
+        type: pendingValidation.maintenanceType,
+        kilometrage: vehicle.kilometrage,
+        description: `Entretien ${pendingValidation.maintenanceType} validé`
+      };
       
-      // Mettre à jour le véhicule dans la liste
-      const updatedVehicles = vehicles.map(v =>
-        v.immatriculation === vehiclePlate ? { ...updatedVehicle } : { ...v }
-      );
-      setVehicles([...updatedVehicles]);
+      console.log('📋 Données de validation:', validationData);
       
-      // Recalculer immédiatement la liste des entretiens avec les véhicules mis à jour
-      // Utiliser directement les véhicules mis à jour pour éviter les problèmes de référence
-      const fleetAverage = calculateFleetAverage(updatedVehicles);
-      const urgentsMaintenance = [];
-      
-      updatedVehicles.forEach(vehicleInList => {
-        // Utiliser le véhicule mis à jour si c'est celui qu'on vient de valider
-        const vehicleToUse = vehicleInList.immatriculation === vehiclePlate ? updatedVehicle : vehicleInList;
-        const maintenance = calculateMaintenanceForVehicle(vehicleToUse, fleetAverage);
-        if (!maintenance) return;
-        
-        Object.entries(maintenance).forEach(([type, data]) => {
-          if (data.daysRemaining <= 7) {
-            urgentsMaintenance.push({
-              vehicle: vehicleToUse, // Utiliser le véhicule avec le bon kilométrage
-              maintenance: data, // Utiliser les nouvelles données d'entretien
-              type: type
-            });
-          }
-        });
+      const response = await fetch('http://localhost:4000/api/admin/entretiens/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(validationData)
       });
+
+      console.log('📊 Status de la réponse:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('❌ Erreur API:', errorData);
+        throw new Error(errorData.message || 'Erreur lors de la validation');
+      }
+
+      const result = await response.json();
+      console.log('✅ Entretien validé:', result);
+
+      // 2. Recharger TOUTES les données depuis le serveur
+      console.log('🔄 Rechargement complet des données...');
+      const vehiclesResponse = await fetch('http://localhost:4000/api/admin/vehicules');
+      const vehiclesData = await vehiclesResponse.json();
       
-      const formattedData = formatMaintenanceData(urgentsMaintenance);
+      // 3. Mettre à jour les véhicules avec les nouvelles estimations
+      setVehicles(vehiclesData.vehicules);
+      
+      // 4. Recalculer les entretiens urgents avec les nouvelles données
+      const urgentMaintenance = getUrgentMaintenance(vehiclesData.vehicules);
+      const formattedData = formatMaintenanceData(urgentMaintenance);
       setMaintenanceData(formattedData);
       
-      console.log('Nouveau véhicule après validation:', updatedVehicle);
-      console.log('Nouvelle liste d\'entretiens:', formattedData);
-
-      // Notification de succès
-      setNotification({
-        message: `Entretien ${maintenanceType} validé pour ${vehiclePlate}. Nouvelle estimation calculée.`,
-        type: 'success'
+      console.log('✅ Synchronisation terminée:', {
+        vehiclesCount: vehiclesData.vehicules.length,
+        urgentCount: formattedData.length,
+        validatedType: pendingValidation.maintenanceType,
+        validatedVehicle: pendingValidation.vehiclePlate
       });
-    } catch (error) {
-      console.error('Erreur lors de la validation:', error);
+
+      // 5. Fermer le modal et afficher la notification
+      setShowConfirmation(false);
+      setPendingValidation(null);
+      
       setNotification({
-        message: error.message || 'Erreur lors de la validation de l\'entretien',
-        type: 'error'
+        type: 'success',
+        message: `Entretien ${pendingValidation.maintenanceType} validé avec succès ! Nouvelle estimation calculée.`,
+        isVisible: true
+      });
+
+    } catch (error) {
+      console.error('❌ Erreur validation:', error);
+      setNotification({
+        type: 'error',
+        message: error.message || 'Erreur lors de la validation',
+        isVisible: true
       });
     }
+  };
+
+  // Annuler la validation
+  const cancelValidation = () => {
+    console.log('❌ Validation annulée');
+    setShowConfirmation(false);
+    setPendingValidation(null);
   };
 
   if (loading) {
@@ -157,7 +210,22 @@ const EntretiensUrgents = () => {
           onComplete={handleMaintenanceValidation}
         />
       </div>
-      {notification && <ToastNotification message={notification.message} type={notification.type} />}
+      {notification && (
+        <ToastNotification 
+          message={notification.message} 
+          type={notification.type} 
+          onClose={() => setNotification(null)}
+        />
+      )}
+      <ConfirmationModal
+        isOpen={showConfirmation}
+        onClose={cancelValidation}
+        onConfirm={confirmValidation}
+        title="Confirmer la validation"
+        message={`Voulez-vous valider l'entretien ${pendingValidation?.maintenanceType} pour le véhicule ${pendingValidation?.vehiclePlate} ?`}
+        confirmText="Valider"
+        cancelText="Annuler"
+      />
     </div>
   );
 };

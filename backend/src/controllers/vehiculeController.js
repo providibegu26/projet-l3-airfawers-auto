@@ -46,8 +46,8 @@ async function getAllVehicules(req, res) {
           }
         },
         historiqueEntretiens: {
-          orderBy: { dateEffectuee: 'desc' },
-          take: 1 // Prendre le dernier entretien de chaque type
+          orderBy: { dateEffectuee: 'desc' }
+          // Supprimé le 'take: 1' pour récupérer TOUS les entretiens
         }
       }
     });
@@ -63,19 +63,87 @@ async function getAllVehicules(req, res) {
       const currentKm = vehicule.kilometrage || 0;
       const weeklyKm = vehicule.weeklyKm || 500;
       
-      // Calculer les estimations pour chaque type d'entretien
+      console.log(`📊 Calculs dynamiques pour ${vehicule.immatriculation}:`, {
+        currentKm,
+        weeklyKm,
+        category,
+        historiqueCount: vehicule.historiqueEntretiens.length
+      });
+      
+      // Calculer les estimations dynamiquement pour chaque type d'entretien
       const estimations = {};
       ['vidange', 'bougies', 'freins'].forEach(type => {
         const threshold = thresholds[category][type];
-        const nextThreshold = Math.ceil(currentKm / threshold) * threshold + threshold;
-        const kmRemaining = nextThreshold - currentKm;
-        const weeksRemaining = Math.ceil(kmRemaining / weeklyKm);
-        const daysRemaining = weeksRemaining * 7;
         
-        estimations[`${type}NextThreshold`] = nextThreshold;
-        estimations[`${type}KmRemaining`] = kmRemaining;
-        estimations[`${type}WeeksRemaining`] = weeksRemaining;
-        estimations[`${type}DaysRemaining`] = daysRemaining;
+        // Trouver le dernier entretien de CE TYPE SEULEMENT
+        const dernierEntretien = vehicule.historiqueEntretiens
+          .filter(entretien => entretien.type.toLowerCase() === type.toLowerCase())
+          .sort((a, b) => new Date(b.dateEffectuee) - new Date(a.dateEffectuee))[0];
+        
+        let baseKm;
+        let prochainSeuil;
+        
+        if (dernierEntretien) {
+          // Utiliser le kilométrage du dernier entretien de CE TYPE comme base
+          baseKm = dernierEntretien.kilometrage;
+          console.log(`  ${type}: Dernier entretien ${type} à ${baseKm} km`);
+          
+          // Calculer le prochain seuil basé sur le dernier entretien de CE TYPE
+          const kmDepuisDernierEntretien = currentKm - baseKm;
+          const seuilsPasses = Math.floor(kmDepuisDernierEntretien / threshold);
+          prochainSeuil = baseKm + ((seuilsPasses + 1) * threshold);
+          
+          console.log(`    ${type}: Km depuis dernier entretien ${type}: ${kmDepuisDernierEntretien}, seuils passés: ${seuilsPasses}, prochain seuil: ${prochainSeuil}`);
+        } else {
+          // Aucun entretien précédent de CE TYPE, utiliser 0 comme base
+          baseKm = 0;
+          console.log(`  ${type}: Premier entretien ${type} (base: 0 km)`);
+          
+          // Le véhicule n'a pas encore atteint le premier seuil pour CE TYPE
+          prochainSeuil = threshold;
+        }
+        
+        // Vérifier si le véhicule a déjà dépassé le prochain seuil pour CE TYPE
+        if (currentKm >= prochainSeuil) {
+          // Le véhicule a dépassé le seuil pour CE TYPE, calculer le suivant
+          const seuilsPasses = Math.floor(currentKm / threshold);
+          prochainSeuil = (seuilsPasses + 1) * threshold;
+          console.log(`    ${type}: Véhicule a dépassé le seuil ${type}, nouveau prochain seuil: ${prochainSeuil}`);
+        }
+        
+        // Calculer les estimations dynamiques pour CE TYPE
+        const kmRestants = prochainSeuil - currentKm;
+        
+        // Calculer les semaines restantes de manière cohérente avec le test
+        const semainesRestantes = Math.ceil(kmRestants / weeklyKm);
+        
+        // S'assurer que les semaines restantes ne soient pas négatives
+        if (kmRestants <= 0) {
+          semainesRestantes = 0;
+        }
+        
+        // Calculer les jours restants de manière cohérente avec le test
+        const joursRestants = semainesRestantes * 7;
+        
+        console.log(`    ${type}: Calcul détaillé:`, {
+          kmRestants,
+          weeklyKm,
+          semainesRestantes,
+          joursRestants
+        });
+        
+        estimations[`${type}NextThreshold`] = prochainSeuil;
+        estimations[`${type}KmRemaining`] = kmRestants;
+        estimations[`${type}WeeksRemaining`] = semainesRestantes;
+        estimations[`${type}DaysRemaining`] = joursRestants;
+        
+        console.log(`  ${type}:`, {
+          baseKm,
+          prochainSeuil,
+          kmRestants,
+          semainesRestantes,
+          joursRestants
+        });
       });
       
       return {
@@ -230,13 +298,12 @@ async function updateMileage(req, res) {
       return res.status(404).json({ error: "Véhicule non trouvé" });
     }
 
-    // Mettre à jour le kilométrage
+    // Mettre à jour le kilométrage ET le weeklyKm
     const updatedVehicule = await prisma.vehicule.update({
       where: { immatriculation },
       data: {
         kilometrage: Number(newMileage),
-        // On pourrait ajouter un champ weeklyKm dans la base si nécessaire
-        // weeklyKm: Number(weeklyKm)
+        weeklyKm: Number(weeklyKm) // Sauvegarder le weeklyKm en base
       },
       include: {
         chauffeur: {
@@ -250,10 +317,15 @@ async function updateMileage(req, res) {
       }
     });
 
+    console.log('✅ Kilométrage et weeklyKm mis à jour:', {
+      immatriculation,
+      newMileage: updatedVehicule.kilometrage,
+      weeklyKm: updatedVehicule.weeklyKm
+    });
+
     res.json({
       message: "Kilométrage mis à jour avec succès", 
-      vehicule: updatedVehicule,
-      weeklyKm: weeklyKm 
+      vehicule: updatedVehicule
     });
 
   } catch (error) {

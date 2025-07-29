@@ -15,22 +15,44 @@ export const maintenanceThresholds = {
 // Récupérer les véhicules depuis la base de données
 export const fetchVehicles = async () => {
   try {
+    console.log('🔄 Récupération des véhicules depuis le serveur...');
     const response = await fetch('http://localhost:4000/api/admin/vehicules');
     const data = await response.json();
     
+    console.log('📊 Données reçues du serveur:', data.vehicules?.length || 0, 'véhicules');
+    
     // Ajouter les propriétés nécessaires pour les entretiens
-    const vehiclesWithMaintenance = data.vehicules.map(vehicle => ({
-      ...vehicle,
-      currentMileage: vehicle.kilometrage || 0,
-      weeklyKm: 0, // Première fois pour tous les véhicules
-      lastMaintenanceUpdate: null,
-      lastMileageUpdate: null, // Date de la dernière mise à jour du kilométrage
-      maintenanceHistory: []
-    }));
+    const vehiclesWithMaintenance = data.vehicules.map(vehicle => {
+      const vehicleWithData = {
+        ...vehicle,
+        currentMileage: vehicle.kilometrage || 0,
+        weeklyKm: vehicle.weeklyKm || 500, // Utiliser le weeklyKm de la base
+        lastMaintenanceUpdate: null,
+        lastMileageUpdate: null, // Date de la dernière mise à jour du kilométrage
+        maintenanceHistory: []
+      };
+      
+      console.log(`🚗 ${vehicle.immatriculation}:`, {
+        kilometrage: vehicle.kilometrage,
+        weeklyKm: vehicle.weeklyKm,
+        historiqueCount: vehicle.historiqueEntretiens?.length || 0
+      });
+      
+      return vehicleWithData;
+    });
+    
+    console.log('🚗 Véhicules récupérés avec weeklyKm:', 
+      vehiclesWithMaintenance.map(v => ({
+        immatriculation: v.immatriculation,
+        weeklyKm: v.weeklyKm,
+        kilometrage: v.kilometrage,
+        historiqueCount: v.historiqueEntretiens?.length || 0
+      }))
+    );
     
     return vehiclesWithMaintenance;
   } catch (error) {
-    console.error('Erreur récupération véhicules:', error);
+    console.error('❌ Erreur récupération véhicules:', error);
     throw error;
   }
 };
@@ -89,44 +111,56 @@ export const calculateMaintenanceForVehicle = (vehicle, fleetAverage) => {
   
   if (weeklyKm === 0) return null;
 
+  // Utiliser les estimations dynamiques calculées côté serveur
   const maintenance = {
     vidange: {
       threshold: thresholds.vidange,
-      // Utiliser les nouvelles estimations si disponibles après validation
-      nextKm: vehicle.vidangeNextThreshold || Math.ceil(currentKm / thresholds.vidange) * thresholds.vidange,
-      kmRemaining: vehicle.vidangeKmRemaining || (Math.ceil(currentKm / thresholds.vidange) * thresholds.vidange - currentKm),
-      weeksRemaining: vehicle.vidangeWeeksRemaining || Math.ceil((Math.ceil(currentKm / thresholds.vidange) * thresholds.vidange - currentKm) / weeklyKm),
-      daysRemaining: vehicle.vidangeDaysRemaining || Math.ceil((Math.ceil(currentKm / thresholds.vidange) * thresholds.vidange - currentKm) / weeklyKm) * 7
+      nextKm: vehicle.vidangeNextThreshold,
+      kmRemaining: vehicle.vidangeKmRemaining,
+      weeksRemaining: vehicle.vidangeWeeksRemaining,
+      daysRemaining: vehicle.vidangeDaysRemaining
     },
     bougies: {
       threshold: thresholds.bougies,
-      // Utiliser les nouvelles estimations si disponibles après validation
-      nextKm: vehicle.bougiesNextThreshold || Math.ceil(currentKm / thresholds.bougies) * thresholds.bougies,
-      kmRemaining: vehicle.bougiesKmRemaining || (Math.ceil(currentKm / thresholds.bougies) * thresholds.bougies - currentKm),
-      weeksRemaining: vehicle.bougiesWeeksRemaining || Math.ceil((Math.ceil(currentKm / thresholds.bougies) * thresholds.bougies - currentKm) / weeklyKm),
-      daysRemaining: vehicle.bougiesDaysRemaining || Math.ceil((Math.ceil(currentKm / thresholds.bougies) * thresholds.bougies - currentKm) / weeklyKm) * 7
+      nextKm: vehicle.bougiesNextThreshold,
+      kmRemaining: vehicle.bougiesKmRemaining,
+      weeksRemaining: vehicle.bougiesWeeksRemaining,
+      daysRemaining: vehicle.bougiesDaysRemaining
     },
     freins: {
       threshold: thresholds.freins,
-      // Utiliser les nouvelles estimations si disponibles après validation
-      nextKm: vehicle.freinsNextThreshold || Math.ceil(currentKm / thresholds.freins) * thresholds.freins,
-      kmRemaining: vehicle.freinsKmRemaining || (Math.ceil(currentKm / thresholds.freins) * thresholds.freins - currentKm),
-      weeksRemaining: vehicle.freinsWeeksRemaining || Math.ceil((Math.ceil(currentKm / thresholds.freins) * thresholds.freins - currentKm) / weeklyKm),
-      daysRemaining: vehicle.freinsDaysRemaining || Math.ceil((Math.ceil(currentKm / thresholds.freins) * thresholds.freins - currentKm) / weeklyKm) * 7
+      nextKm: vehicle.freinsNextThreshold,
+      kmRemaining: vehicle.freinsKmRemaining,
+      weeksRemaining: vehicle.freinsWeeksRemaining,
+      daysRemaining: vehicle.freinsDaysRemaining
     }
   };
+
+  console.log(`🔧 Estimations dynamiques pour ${vehicle.immatriculation}:`, {
+    currentKm,
+    weeklyKm,
+    vidange: maintenance.vidange,
+    bougies: maintenance.bougies,
+    freins: maintenance.freins
+  });
 
   return maintenance;
 };
 
-// Calculer les statistiques par type d'entretien
+// Calculer les statistiques d'entretien pour un type spécifique
 export const calculateMaintenanceStats = (vehicles, type) => {
   const fleetAverage = calculateFleetAverage(vehicles);
-  
   const maintenanceList = vehicles
     .map(vehicle => {
       const maintenance = calculateMaintenanceForVehicle(vehicle, fleetAverage);
-      if (!maintenance) return null;
+      if (!maintenance || !maintenance[type]) return null;
+      
+      // EXCLURE les entretiens urgents (≤ 7 jours) des pages spécifiques
+      // Ils ne doivent apparaître que sur la page des entretiens urgents
+      if (maintenance[type].daysRemaining <= 7) {
+        console.log(`🚫 ${vehicle.immatriculation} - ${type}: Entretien urgent exclu de la page spécifique`);
+        return null;
+      }
       
       return {
         vehicle: vehicle,
@@ -140,27 +174,109 @@ export const calculateMaintenanceStats = (vehicles, type) => {
   return maintenanceList;
 };
 
-// Calculer les entretiens urgents (≤ 7 jours)
+// Calculer les entretiens urgents (≤ 7 jours) - SEULEMENT sur la page urgente
 export const getUrgentMaintenance = (vehicles) => {
-  const fleetAverage = calculateFleetAverage(vehicles);
+  console.log('🔍 getUrgentMaintenance appelé avec', vehicles.length, 'véhicules');
   const allMaintenance = [];
   
   vehicles.forEach(vehicle => {
-    const maintenance = calculateMaintenanceForVehicle(vehicle, fleetAverage);
-    if (!maintenance) return;
+    const historiqueEntretiens = vehicle.historiqueEntretiens || [];
+    console.log(`📊 ${vehicle.immatriculation}: ${historiqueEntretiens.length} entretiens dans l'historique`);
     
-    Object.entries(maintenance).forEach(([type, data]) => {
-      if (data.daysRemaining <= 7) {
-        allMaintenance.push({
-          vehicle: vehicle,
-          maintenance: data,
-          type: type
-        });
+    // Pour chaque type d'entretien
+    ['vidange', 'bougies', 'freins'].forEach(type => {
+      const nextThreshold = vehicle[`${type}NextThreshold`];
+      const daysRemaining = vehicle[`${type}DaysRemaining`];
+      
+      if (nextThreshold && daysRemaining !== undefined) {
+        console.log(`  ${type}: ${daysRemaining} jours restants`);
+        
+        // RÈGLE : Inclure UNIQUEMENT les entretiens urgents (≤ 7 jours) qui n'ont PAS été validés récemment
+        const dernierEntretien = historiqueEntretiens.find(
+          entretien => entretien.type.toLowerCase() === type.toLowerCase()
+        );
+        
+        if (daysRemaining <= 7 && !dernierEntretien) {
+          // Entretien urgent ET non validé récemment → Page urgente
+          console.log(`    🚨 INCLUS: Entretien urgent (${daysRemaining} jours) → Page urgente`);
+          allMaintenance.push({
+            vehicle: vehicle,
+            maintenance: {
+              nextThreshold: nextThreshold,
+              daysRemaining: daysRemaining,
+              kmRemaining: vehicle[`${type}KmRemaining`],
+              weeksRemaining: vehicle[`${type}WeeksRemaining`]
+            },
+            type: type
+          });
+        } else if (daysRemaining <= 7 && dernierEntretien) {
+          // Entretien urgent MAIS validé récemment → Page spécifique (pas urgente)
+          console.log(`    🚫 EXCLU: Entretien urgent mais validé récemment (${daysRemaining} jours) → Page spécifique`);
+        } else {
+          console.log(`    ✅ Non-urgent (${daysRemaining} jours) → Page spécifique`);
+        }
       }
     });
   });
   
+  console.log('📋 Entretiens urgents trouvés:', allMaintenance.length);
   return allMaintenance.sort((a, b) => a.maintenance.daysRemaining - b.maintenance.daysRemaining);
+};
+
+// Calculer les entretiens pour les pages spécifiques (vidange, bougies, freins)
+export const getNonUrgentMaintenance = (vehicles, type) => {
+  console.log(`🔍 getNonUrgentMaintenance appelé pour ${type} avec`, vehicles.length, 'véhicules');
+  const maintenanceList = [];
+  
+  vehicles.forEach(vehicle => {
+    const nextThreshold = vehicle[`${type}NextThreshold`];
+    const daysRemaining = vehicle[`${type}DaysRemaining`];
+    
+    if (nextThreshold && daysRemaining !== undefined) {
+      console.log(`  ${vehicle.immatriculation} - ${type}: ${daysRemaining} jours restants`);
+      
+      // RÈGLE : Inclure TOUS les entretiens de ce type SAUF les urgents non validés
+      const historiqueEntretiens = vehicle.historiqueEntretiens || [];
+      const dernierEntretien = historiqueEntretiens.find(
+        entretien => entretien.type.toLowerCase() === type.toLowerCase()
+      );
+      
+      if (dernierEntretien) {
+        // Entretien validé récemment → TOUJOURS inclure sur la page spécifique
+        const reason = daysRemaining <= 7 ? 'Validé récemment (urgent)' : 'Validé récemment';
+        console.log(`    ✅ INCLUS: ${reason} (${daysRemaining} jours) → Page ${type}`);
+        maintenanceList.push({
+          vehicle: vehicle,
+          maintenance: {
+            nextThreshold: nextThreshold,
+            daysRemaining: daysRemaining,
+            kmRemaining: vehicle[`${type}KmRemaining`],
+            weeksRemaining: vehicle[`${type}WeeksRemaining`]
+          },
+          type: type
+        });
+      } else if (daysRemaining > 7) {
+        // Entretien non-urgent → Inclure sur la page spécifique
+        console.log(`    ✅ INCLUS: Non-urgent (${daysRemaining} jours) → Page ${type}`);
+        maintenanceList.push({
+          vehicle: vehicle,
+          maintenance: {
+            nextThreshold: nextThreshold,
+            daysRemaining: daysRemaining,
+            kmRemaining: vehicle[`${type}KmRemaining`],
+            weeksRemaining: vehicle[`${type}WeeksRemaining`]
+          },
+          type: type
+        });
+      } else {
+        // Entretien urgent ET non validé → Page urgente uniquement
+        console.log(`    🚫 EXCLU: Urgent et non validé (${daysRemaining} jours) → Page urgente uniquement`);
+      }
+    }
+  });
+  
+  console.log(`📋 Entretiens trouvés pour ${type}:`, maintenanceList.length);
+  return maintenanceList.sort((a, b) => a.maintenance.daysRemaining - b.maintenance.daysRemaining);
 };
 
 // Mettre à jour le kilométrage d'un véhicule
@@ -210,47 +326,17 @@ export const validateMaintenance = async (vehicle, maintenanceType) => {
     const data = await response.json();
     console.log('✅ Entretien sauvegardé en base:', data);
     
-    // Calculer le prochain seuil pour ce type d'entretien
-    const category = vehicle.categorie || 'LIGHT';
-    const threshold = maintenanceThresholds[category][maintenanceType];
+    // NOUVELLE LOGIQUE : Les estimations seront recalculées dynamiquement côté serveur
+    // Pas besoin de calculer ici, car elles seront recalculées à chaque requête
     
-    // Le prochain seuil sera le seuil actuel + le seuil de maintenance
-    // EXEMPLE CONCRET:
-    // - Véhicule HEAVY (seuil vidange: 8 000 km)
-    // - Kilométrage actuel: 8 000 km (entretien validé)
-    // - Prochain seuil: 8 000 + 8 000 = 16 000 km
-    // - Si km hebdomadaire = 500 km
-    // - Jours restants: (16 000 - 8 000) / 500 * 7 = 112 jours
-    const nextThreshold = Math.ceil(currentMileage / threshold) * threshold + threshold;
+    console.log('🔄 Estimations seront recalculées dynamiquement au prochain affichage');
     
-    console.log('Seuil actuel:', Math.ceil(currentMileage / threshold) * threshold);
-    console.log('Prochain seuil calculé:', nextThreshold);
-    
-    // Calculer les nouvelles estimations pour ce type d'entretien
-    const weeklyKm = vehicle.weeklyKm || 500; // Utiliser le km hebdomadaire du véhicule
-    const kmRemaining = nextThreshold - currentMileage;
-    const weeksRemaining = Math.ceil(kmRemaining / weeklyKm);
-    const daysRemaining = weeksRemaining * 7;
-    
-    console.log('Nouvelles estimations après validation:');
-    console.log('- Kilométrage actuel:', currentMileage);
-    console.log('- Prochain seuil:', nextThreshold);
-    console.log('- Km restants:', kmRemaining);
-    console.log('- Semaines restantes:', weeksRemaining);
-    console.log('- Jours restants:', daysRemaining);
-    
-    // Créer un nouvel objet véhicule avec les nouvelles estimations
+    // Retourner le véhicule avec la date de mise à jour
     const updatedVehicle = {
       ...vehicle,
-      currentMileage: currentMileage, // S'assurer que currentMileage est défini
+      currentMileage: currentMileage,
       lastMaintenanceUpdate: new Date().toISOString()
     };
-    
-    // Mettre à jour les estimations pour ce type d'entretien spécifique
-    updatedVehicle[`${maintenanceType}NextThreshold`] = nextThreshold;
-    updatedVehicle[`${maintenanceType}KmRemaining`] = kmRemaining;
-    updatedVehicle[`${maintenanceType}WeeksRemaining`] = weeksRemaining;
-    updatedVehicle[`${maintenanceType}DaysRemaining`] = daysRemaining;
     
     return updatedVehicle;
     
@@ -260,8 +346,81 @@ export const validateMaintenance = async (vehicle, maintenanceType) => {
   }
 };
 
+// Forcer le recalcul des estimations en rechargeant les données
+export const refreshMaintenanceEstimations = async () => {
+  try {
+    console.log('🔄 Rechargement des estimations depuis le serveur...');
+    const vehicles = await fetchVehicles();
+    console.log('✅ Estimations recalculées:', vehicles.length, 'véhicules');
+    return vehicles;
+  } catch (error) {
+    console.error('❌ Erreur recalcul estimations:', error);
+    throw error;
+  }
+};
+
+// Forcer le recalcul global des estimations
+export const forceGlobalRecalculation = async () => {
+  try {
+    console.log('🔄 Recalcul global des estimations...');
+    
+    // 1. Recharger les véhicules depuis le serveur avec l'historique
+    const response = await fetch('http://localhost:4000/api/admin/vehicules');
+    const data = await response.json();
+    
+    console.log('✅ Données reçues du serveur:', data.vehicules?.length || 0, 'véhicules');
+    
+    // 2. Mettre à jour les véhicules avec les nouvelles estimations et l'historique
+    const updatedVehicles = data.vehicules.map(vehicle => {
+      const vehicleWithData = {
+        ...vehicle,
+        currentMileage: vehicle.kilometrage || 0,
+        weeklyKm: vehicle.weeklyKm || 500,
+        lastMaintenanceUpdate: null,
+        lastMileageUpdate: null,
+        maintenanceHistory: [],
+        // Conserver l'historique des entretiens
+        historiqueEntretiens: vehicle.historiqueEntretiens || []
+      };
+      
+      console.log(`🚗 ${vehicle.immatriculation}:`, {
+        kilometrage: vehicle.kilometrage,
+        weeklyKm: vehicle.weeklyKm,
+        historiqueCount: vehicle.historiqueEntretiens?.length || 0,
+        estimations: {
+          vidangeNextThreshold: vehicle.vidangeNextThreshold,
+          bougiesNextThreshold: vehicle.bougiesNextThreshold,
+          freinsNextThreshold: vehicle.freinsNextThreshold
+        }
+      });
+      
+      return vehicleWithData;
+    });
+    
+    console.log('✅ Recalcul global terminé');
+    return updatedVehicles;
+    
+  } catch (error) {
+    console.error('❌ Erreur recalcul global:', error);
+    throw error;
+  }
+};
+
 // Formater les données pour l'affichage dans les tableaux
 export const formatMaintenanceData = (maintenanceList) => {
+  const getTypeLabel = (type) => {
+    switch (type) {
+      case 'vidange':
+        return 'Vidange';
+      case 'bougies':
+        return 'Bougies';
+      case 'freins':
+        return 'Freins';
+      default:
+        return type;
+    }
+  };
+
   return maintenanceList.map(item => {
     // Calculer la date d'entretien en utilisant la date actuelle de l'appareil
     const currentDate = new Date();
@@ -277,7 +436,7 @@ export const formatMaintenanceData = (maintenanceList) => {
         ? `${item.vehicle.chauffeur.nom} ${item.vehicle.chauffeur.prenom}`
         : 'Non attribué',
       kilometrage: item.vehicle.currentMileage,
-      type: item.type,
+      type: getTypeLabel(item.type),
       seuil: item.maintenance.threshold,
       prochainKm: item.maintenance.nextKm,
       kmRestants: item.maintenance.kmRemaining,

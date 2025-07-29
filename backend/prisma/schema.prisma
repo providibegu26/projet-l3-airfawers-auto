@@ -45,6 +45,7 @@ model Vehicule {
   annee           Int      @default(2024)
   categorie       String   @default("LIGHT")
   kilometrage     Int      @default(0)
+  weeklyKm        Int      @default(500) // Kilométrage hebdomadaire moyen
   statut          String   @default("disponible")
   dateAjout       DateTime @default(now())
   chauffeurId     Int?

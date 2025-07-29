@@ -10,16 +10,44 @@ import {
 const StatsCards = () => {
   const [chauffeurCount, setChauffeurCount] = useState(0);
   const [vehicleCount, setVehicleCount] = useState(0);
+  const [urgentMaintenanceCount, setUrgentMaintenanceCount] = useState(0);
 
   useEffect(() => {
     // Récupérer le nombre de chauffeurs
     fetch('http://localhost:4000/api/admin/chauffeurs')
       .then(res => res.json())
       .then(data => setChauffeurCount((data.chauffeurs || []).length));
-    // Récupérer le nombre de véhicules
+    
+    // Récupérer le nombre de véhicules et calculer les entretiens urgents
     fetch('http://localhost:4000/api/admin/vehicules')
       .then(res => res.json())
-      .then(data => setVehicleCount((data.vehicules || []).length));
+      .then(data => {
+        const vehicles = data.vehicules || [];
+        setVehicleCount(vehicles.length);
+        
+        // Calculer le nombre d'entretiens urgents
+        let urgentCount = 0;
+        vehicles.forEach(vehicle => {
+          const historiqueEntretiens = vehicle.historiqueEntretiens || [];
+          
+          ['vidange', 'bougies', 'freins'].forEach(type => {
+            const daysRemaining = vehicle[`${type}DaysRemaining`];
+            
+            if (daysRemaining !== undefined && daysRemaining <= 7) {
+              // Vérifier si l'entretien n'a pas été validé récemment
+              const dernierEntretien = historiqueEntretiens.find(
+                entretien => entretien.type.toLowerCase() === type.toLowerCase()
+              );
+              
+              if (!dernierEntretien) {
+                urgentCount++;
+              }
+            }
+          });
+        });
+        
+        setUrgentMaintenanceCount(urgentCount);
+      });
   }, []);
 
   return (
@@ -57,7 +85,7 @@ const StatsCards = () => {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-gray-500 text-sm">Entretiens</p>
-            <h3 className="text-2xl font-bold text-gray-800">5</h3>
+            <h3 className="text-2xl font-bold text-gray-800">{urgentMaintenanceCount}</h3>
             <p className="text-red-500 text-xs mt-1">À traiter rapidement</p>
           </div>
           <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center text-red-600">
