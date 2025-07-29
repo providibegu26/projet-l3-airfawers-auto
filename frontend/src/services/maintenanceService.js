@@ -191,13 +191,8 @@ export const getUrgentMaintenance = (vehicles) => {
       if (nextThreshold && daysRemaining !== undefined) {
         console.log(`  ${type}: ${daysRemaining} jours restants`);
         
-        // RÈGLE : Inclure UNIQUEMENT les entretiens urgents (≤ 7 jours) qui n'ont PAS été validés récemment
-        const dernierEntretien = historiqueEntretiens.find(
-          entretien => entretien.type.toLowerCase() === type.toLowerCase()
-        );
-        
-        if (daysRemaining <= 7 && !dernierEntretien) {
-          // Entretien urgent ET non validé récemment → Page urgente
+        // RÈGLE CORRIGÉE : Inclure TOUS les entretiens urgents (≤ 7 jours) sur la page urgente
+        if (daysRemaining <= 7) {
           console.log(`    🚨 INCLUS: Entretien urgent (${daysRemaining} jours) → Page urgente`);
           allMaintenance.push({
             vehicle: vehicle,
@@ -209,9 +204,6 @@ export const getUrgentMaintenance = (vehicles) => {
             },
             type: type
           });
-        } else if (daysRemaining <= 7 && dernierEntretien) {
-          // Entretien urgent MAIS validé récemment → Page spécifique (pas urgente)
-          console.log(`    🚫 EXCLU: Entretien urgent mais validé récemment (${daysRemaining} jours) → Page spécifique`);
         } else {
           console.log(`    ✅ Non-urgent (${daysRemaining} jours) → Page spécifique`);
         }
@@ -235,28 +227,8 @@ export const getNonUrgentMaintenance = (vehicles, type) => {
     if (nextThreshold && daysRemaining !== undefined) {
       console.log(`  ${vehicle.immatriculation} - ${type}: ${daysRemaining} jours restants`);
       
-      // RÈGLE : Inclure TOUS les entretiens de ce type SAUF les urgents non validés
-      const historiqueEntretiens = vehicle.historiqueEntretiens || [];
-      const dernierEntretien = historiqueEntretiens.find(
-        entretien => entretien.type.toLowerCase() === type.toLowerCase()
-      );
-      
-      if (dernierEntretien) {
-        // Entretien validé récemment → TOUJOURS inclure sur la page spécifique
-        const reason = daysRemaining <= 7 ? 'Validé récemment (urgent)' : 'Validé récemment';
-        console.log(`    ✅ INCLUS: ${reason} (${daysRemaining} jours) → Page ${type}`);
-        maintenanceList.push({
-          vehicle: vehicle,
-          maintenance: {
-            nextThreshold: nextThreshold,
-            daysRemaining: daysRemaining,
-            kmRemaining: vehicle[`${type}KmRemaining`],
-            weeksRemaining: vehicle[`${type}WeeksRemaining`]
-          },
-          type: type
-        });
-      } else if (daysRemaining > 7) {
-        // Entretien non-urgent → Inclure sur la page spécifique
+      // RÈGLE CORRIGÉE : Inclure UNIQUEMENT les entretiens non-urgents (> 7 jours) sur les pages spécifiques
+      if (daysRemaining > 7) {
         console.log(`    ✅ INCLUS: Non-urgent (${daysRemaining} jours) → Page ${type}`);
         maintenanceList.push({
           vehicle: vehicle,
@@ -269,8 +241,8 @@ export const getNonUrgentMaintenance = (vehicles, type) => {
           type: type
         });
       } else {
-        // Entretien urgent ET non validé → Page urgente uniquement
-        console.log(`    🚫 EXCLU: Urgent et non validé (${daysRemaining} jours) → Page urgente uniquement`);
+        // Entretien urgent → Page urgente uniquement
+        console.log(`    🚫 EXCLU: Urgent (${daysRemaining} jours) → Page urgente uniquement`);
       }
     }
   });
@@ -452,4 +424,56 @@ export const formatMaintenanceData = (maintenanceList) => {
               item.maintenance.daysRemaining <= 14 ? 'À venir' : 'Normal'
     };
   });
+}; 
+
+// Générer la liste des entretiens prévus dans les 2 mois à venir (pour le calendrier)
+export const getUpcomingMaintenances = (vehicles, daysWindow = 60) => {
+  const today = new Date();
+  const endDate = new Date();
+  endDate.setDate(today.getDate() + daysWindow);
+
+  // Liste des entretiens à venir
+  const upcoming = [];
+
+  vehicles.forEach(vehicle => {
+    ['vidange', 'bougies', 'freins'].forEach(type => {
+      const daysRemaining = vehicle[`${type}DaysRemaining`];
+      const nextThreshold = vehicle[`${type}NextThreshold`];
+      if (daysRemaining === undefined || nextThreshold === undefined) return;
+
+      // Date prédite de l'entretien
+      const predictedDate = new Date();
+      predictedDate.setDate(today.getDate() + daysRemaining);
+
+      // Filtrer : uniquement dans la fenêtre des 2 mois à venir
+      if (predictedDate >= today && predictedDate <= endDate) {
+        // Statut couleur
+        let color = 'green';
+        if (daysRemaining <= 7) color = 'red';
+        else if (daysRemaining <= 14) color = 'orange';
+
+        upcoming.push({
+          date: predictedDate.toISOString().slice(0, 10), // format YYYY-MM-DD
+          immatriculation: vehicle.immatriculation,
+          marque: vehicle.marque,
+          modele: vehicle.modele,
+          type,
+          daysRemaining,
+          statut: color,
+          chauffeur: vehicle.chauffeur ? `${vehicle.chauffeur.nom} ${vehicle.chauffeur.prenom}` : 'Non assigné',
+          vehicleId: vehicle.id,
+        });
+      }
+    });
+  });
+
+  // Grouper par date pour le calendrier
+  const grouped = {};
+  upcoming.forEach(item => {
+    if (!grouped[item.date]) grouped[item.date] = [];
+    grouped[item.date].push(item);
+  });
+
+  // Retourner un tableau [{ date, entretiens: [...] }]
+  return Object.entries(grouped).map(([date, entretiens]) => ({ date, entretiens }));
 }; 
