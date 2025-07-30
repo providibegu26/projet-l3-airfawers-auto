@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faArrowLeft, faChevronLeft, faChevronRight, faTimes, faTools, faUser, faCar } from '@fortawesome/free-solid-svg-icons';
+import { faArrowLeft, faChevronLeft, faChevronRight, faTimes, faTools, faUser, faCar, faPhone } from '@fortawesome/free-solid-svg-icons';
 import CalendarLegend from './CalendarLegend';
-import { getUpcomingMaintenances } from '../../services/maintenanceService';
+import { generateCalendarData } from '../../services/maintenanceService';
 
 const FullCalendar = () => {
   const [vehicles, setVehicles] = useState([]);
@@ -29,7 +29,8 @@ const FullCalendar = () => {
 
   useEffect(() => {
     if (vehicles && vehicles.length > 0) {
-      setCalendarData(getUpcomingMaintenances(vehicles, 60));
+      const calendarDataTransformed = generateCalendarData(vehicles);
+      setCalendarData(calendarDataTransformed);
     }
   }, [vehicles]);
 
@@ -89,8 +90,8 @@ const FullCalendar = () => {
     if (entretiens.length === 0) return '';
     
     // Couleur la plus urgente du jour
-    if (entretiens.some(e => e.statut === 'red')) return 'bg-gradient-to-br from-red-100 to-red-200 border-red-400 text-red-800 shadow-sm hover:shadow-md';
-    if (entretiens.some(e => e.statut === 'orange')) return 'bg-gradient-to-br from-orange-100 to-orange-200 border-orange-400 text-orange-800 shadow-sm hover:shadow-md';
+    if (entretiens.some(e => e.daysRemaining <= 7)) return 'bg-gradient-to-br from-red-100 to-red-200 border-red-400 text-red-800 shadow-sm hover:shadow-md';
+    if (entretiens.some(e => e.daysRemaining <= 14)) return 'bg-gradient-to-br from-orange-100 to-orange-200 border-orange-400 text-orange-800 shadow-sm hover:shadow-md';
     return 'bg-gradient-to-br from-green-100 to-green-200 border-green-400 text-green-800 shadow-sm hover:shadow-md';
   };
 
@@ -274,6 +275,13 @@ const FullCalendar = () => {
                         {e.daysRemaining} jours
                       </span>
                     </div>
+                    {e.telephone && (
+                      <div className="flex items-center gap-1">
+                        <FontAwesomeIcon icon={faPhone} className="text-gray-400" />
+                        <span className="font-medium">Téléphone :</span>
+                        <span className="text-gray-700">{e.telephone}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

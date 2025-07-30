@@ -464,15 +464,66 @@ export const getUpcomingMaintenances = (vehicles, daysWindow = 60) => {
       const daysRemaining = vehicle[`${type}DaysRemaining`];
       
       if (daysRemaining !== undefined && daysRemaining <= daysWindow) {
+        // Calculer la date exacte de l'entretien
+        const currentDate = new Date();
+        const maintenanceDate = new Date(currentDate);
+        maintenanceDate.setDate(currentDate.getDate() + daysRemaining);
+        
         upcomingMaintenances.push({
           vehicle: vehicle,
           type: type,
           daysRemaining: daysRemaining,
-          nextThreshold: vehicle[`${type}NextThreshold`]
+          nextThreshold: vehicle[`${type}NextThreshold`],
+          maintenanceDate: maintenanceDate,
+          dateKey: maintenanceDate.toISOString().slice(0, 10)
         });
       }
     });
   });
   
   return upcomingMaintenances.sort((a, b) => a.daysRemaining - b.daysRemaining);
+};
+
+// Nouvelle fonction pour générer les données du calendrier avec structure optimisée
+export const generateCalendarData = (vehicles, targetMonth = null, targetYear = null, daysWindow = 60) => {
+  const upcomingMaintenances = getUpcomingMaintenances(vehicles, daysWindow);
+  const calendarData = {};
+  
+  upcomingMaintenances.forEach(maintenance => {
+    const { dateKey, vehicle, type, daysRemaining, maintenanceDate } = maintenance;
+    
+    // Filtrer par mois et année si spécifiés
+    if (targetMonth !== null && targetYear !== null) {
+      const maintenanceMonth = maintenanceDate.getMonth();
+      const maintenanceYear = maintenanceDate.getFullYear();
+      
+      if (maintenanceMonth !== targetMonth || maintenanceYear !== targetYear) {
+        return; // Ignorer les entretiens qui ne sont pas dans le mois cible
+      }
+    }
+    
+    if (!calendarData[dateKey]) {
+      calendarData[dateKey] = {
+        date: dateKey,
+        maintenanceDate: maintenanceDate,
+        entretiens: []
+      };
+    }
+    
+    // Déterminer le statut de couleur
+    let colorStatus = 'green';
+    if (daysRemaining <= 7) colorStatus = 'red';
+    else if (daysRemaining <= 14) colorStatus = 'orange';
+    
+    calendarData[dateKey].entretiens.push({
+      vehicle: vehicle,
+      type: type,
+      daysRemaining: daysRemaining,
+      colorStatus: colorStatus,
+      typeLabel: type === 'vidange' ? 'Catégorie A' : 
+                 type === 'categorie_b' ? 'Catégorie B' : 'Catégorie C'
+    });
+  });
+  
+  return Object.values(calendarData).sort((a, b) => new Date(a.date) - new Date(b.date));
 }; 
