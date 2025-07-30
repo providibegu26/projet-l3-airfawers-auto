@@ -56,8 +56,8 @@ async function getAllVehicules(req, res) {
     const vehiculesWithEstimations = vehicules.map(vehicule => {
       const category = vehicule.categorie || 'LIGHT';
       const thresholds = {
-        HEAVY: { vidange: 8000, bougies: 80000, freins: 20000 },
-        LIGHT: { vidange: 5000, bougies: 40000, freins: 50000 }
+        HEAVY: { vidange: 8000, categorie_b: 16000, categorie_c: 24000 },
+        LIGHT: { vidange: 5000, categorie_b: 10000, categorie_c: 15000 }
       };
       
       const currentKm = vehicule.kilometrage || 0;
@@ -72,12 +72,20 @@ async function getAllVehicules(req, res) {
       
       // Calculer les estimations dynamiquement pour chaque type d'entretien
       const estimations = {};
-      ['vidange', 'bougies', 'freins'].forEach(type => {
+      ['vidange', 'categorie_b', 'categorie_c'].forEach(type => {
         const threshold = thresholds[category][type];
         
+        // Mapping des nouveaux noms vers les anciens noms pour la recherche dans l'historique
+        const typeMapping = {
+          'vidange': 'vidange',
+          'categorie_b': 'bougies',
+          'categorie_c': 'freins'
+        };
+        
         // Trouver le dernier entretien de CE TYPE SEULEMENT
+        const oldType = typeMapping[type];
         const dernierEntretien = vehicule.historiqueEntretiens
-          .filter(entretien => entretien.type.toLowerCase() === type.toLowerCase())
+          .filter(entretien => entretien.type.toLowerCase() === oldType.toLowerCase())
           .sort((a, b) => new Date(b.dateEffectuee) - new Date(a.dateEffectuee))[0];
         
         let baseKm;

@@ -2,14 +2,40 @@
 export const maintenanceThresholds = {
   HEAVY: {
     vidange: 8000,
-    bougies: 80000,
-    freins: 20000
+    categorie_b: 16000,
+    categorie_c: 24000
   },
   LIGHT: {
     vidange: 5000,
-    bougies: 40000,
-    freins: 50000
+    categorie_b: 10000,
+    categorie_c: 15000
   }
+};
+
+// Mapping des propriétés du backend vers le frontend
+export const BACKEND_TO_FRONTEND_MAPPING = {
+  'vidange': 'vidange',
+  'bougies': 'categorie_b',
+  'freins': 'categorie_c'
+};
+
+// Fonction pour mapper les propriétés du backend vers le frontend
+export const mapBackendToFrontend = (vehicle) => {
+  const mappedVehicle = { ...vehicle };
+  
+  // Mapper les propriétés d'estimation
+  ['vidange', 'bougies', 'freins'].forEach(oldType => {
+    const newType = BACKEND_TO_FRONTEND_MAPPING[oldType];
+    if (newType && newType !== oldType) {
+      // Copier les propriétés avec les nouveaux noms
+      mappedVehicle[`${newType}NextThreshold`] = vehicle[`${oldType}NextThreshold`];
+      mappedVehicle[`${newType}KmRemaining`] = vehicle[`${oldType}KmRemaining`];
+      mappedVehicle[`${newType}WeeksRemaining`] = vehicle[`${oldType}WeeksRemaining`];
+      mappedVehicle[`${newType}DaysRemaining`] = vehicle[`${oldType}DaysRemaining`];
+    }
+  });
+  
+  return mappedVehicle;
 };
 
 // Récupérer les véhicules depuis la base de données
@@ -23,8 +49,11 @@ export const fetchVehicles = async () => {
     
     // Ajouter les propriétés nécessaires pour les entretiens
     const vehiclesWithMaintenance = data.vehicules.map(vehicle => {
+      // Mapper les propriétés du backend vers le frontend
+      const mappedVehicle = mapBackendToFrontend(vehicle);
+      
       const vehicleWithData = {
-        ...vehicle,
+        ...mappedVehicle,
         currentMileage: vehicle.kilometrage || 0,
         weeklyKm: vehicle.weeklyKm || 500, // Utiliser le weeklyKm de la base
         lastMaintenanceUpdate: null,
@@ -35,7 +64,11 @@ export const fetchVehicles = async () => {
       console.log(`🚗 ${vehicle.immatriculation}:`, {
         kilometrage: vehicle.kilometrage,
         weeklyKm: vehicle.weeklyKm,
-        historiqueCount: vehicle.historiqueEntretiens?.length || 0
+        historiqueCount: vehicle.historiqueEntretiens?.length || 0,
+        mappedProperties: {
+          categorie_bDaysRemaining: mappedVehicle.categorie_bDaysRemaining,
+          categorie_cDaysRemaining: mappedVehicle.categorie_cDaysRemaining
+        }
       });
       
       return vehicleWithData;
@@ -120,19 +153,19 @@ export const calculateMaintenanceForVehicle = (vehicle, fleetAverage) => {
       weeksRemaining: vehicle.vidangeWeeksRemaining,
       daysRemaining: vehicle.vidangeDaysRemaining
     },
-    bougies: {
-      threshold: thresholds.bougies,
-      nextKm: vehicle.bougiesNextThreshold,
-      kmRemaining: vehicle.bougiesKmRemaining,
-      weeksRemaining: vehicle.bougiesWeeksRemaining,
-      daysRemaining: vehicle.bougiesDaysRemaining
+    categorie_b: {
+      threshold: thresholds.categorie_b,
+      nextKm: vehicle.categorie_bNextThreshold,
+      kmRemaining: vehicle.categorie_bKmRemaining,
+      weeksRemaining: vehicle.categorie_bWeeksRemaining,
+      daysRemaining: vehicle.categorie_bDaysRemaining
     },
-    freins: {
-      threshold: thresholds.freins,
-      nextKm: vehicle.freinsNextThreshold,
-      kmRemaining: vehicle.freinsKmRemaining,
-      weeksRemaining: vehicle.freinsWeeksRemaining,
-      daysRemaining: vehicle.freinsDaysRemaining
+    categorie_c: {
+      threshold: thresholds.categorie_c,
+      nextKm: vehicle.categorie_cNextThreshold,
+      kmRemaining: vehicle.categorie_cKmRemaining,
+      weeksRemaining: vehicle.categorie_cWeeksRemaining,
+      daysRemaining: vehicle.categorie_cDaysRemaining
     }
   };
 
@@ -140,8 +173,8 @@ export const calculateMaintenanceForVehicle = (vehicle, fleetAverage) => {
     currentKm,
     weeklyKm,
     vidange: maintenance.vidange,
-    bougies: maintenance.bougies,
-    freins: maintenance.freins
+    categorie_b: maintenance.categorie_b,
+    categorie_c: maintenance.categorie_c
   });
 
   return maintenance;
@@ -184,7 +217,7 @@ export const getUrgentMaintenance = (vehicles) => {
     console.log(`📊 ${vehicle.immatriculation}: ${historiqueEntretiens.length} entretiens dans l'historique`);
     
     // Pour chaque type d'entretien
-    ['vidange', 'bougies', 'freins'].forEach(type => {
+    ['vidange', 'categorie_b', 'categorie_c'].forEach(type => {
       const nextThreshold = vehicle[`${type}NextThreshold`];
       const daysRemaining = vehicle[`${type}DaysRemaining`];
       
@@ -215,7 +248,7 @@ export const getUrgentMaintenance = (vehicles) => {
   return allMaintenance.sort((a, b) => a.maintenance.daysRemaining - b.maintenance.daysRemaining);
 };
 
-// Calculer les entretiens pour les pages spécifiques (vidange, bougies, freins)
+// Calculer les entretiens pour les pages spécifiques (vidange, categorie_b, categorie_c)
 export const getNonUrgentMaintenance = (vehicles, type) => {
   console.log(`🔍 getNonUrgentMaintenance appelé pour ${type} avec`, vehicles.length, 'véhicules');
   const maintenanceList = [];
@@ -381,16 +414,12 @@ export const forceGlobalRecalculation = async () => {
 // Formater les données pour l'affichage dans les tableaux
 export const formatMaintenanceData = (maintenanceList) => {
   const getTypeLabel = (type) => {
-    switch (type) {
-      case 'vidange':
-        return 'Vidange';
-      case 'bougies':
-        return 'Bougies';
-      case 'freins':
-        return 'Freins';
-      default:
-        return type;
-    }
+    const typeLabels = {
+      'vidange': 'Catégorie A',
+      'categorie_b': 'Catégorie B',
+      'categorie_c': 'Catégorie C'
+    };
+    return typeLabels[type] || type;
   };
 
   return maintenanceList.map(item => {
@@ -428,52 +457,22 @@ export const formatMaintenanceData = (maintenanceList) => {
 
 // Générer la liste des entretiens prévus dans les 2 mois à venir (pour le calendrier)
 export const getUpcomingMaintenances = (vehicles, daysWindow = 60) => {
-  const today = new Date();
-  const endDate = new Date();
-  endDate.setDate(today.getDate() + daysWindow);
-
-  // Liste des entretiens à venir
-  const upcoming = [];
-
+  const upcomingMaintenances = [];
+  
   vehicles.forEach(vehicle => {
-    ['vidange', 'bougies', 'freins'].forEach(type => {
+    ['vidange', 'categorie_b', 'categorie_c'].forEach(type => {
       const daysRemaining = vehicle[`${type}DaysRemaining`];
-      const nextThreshold = vehicle[`${type}NextThreshold`];
-      if (daysRemaining === undefined || nextThreshold === undefined) return;
-
-      // Date prédite de l'entretien
-      const predictedDate = new Date();
-      predictedDate.setDate(today.getDate() + daysRemaining);
-
-      // Filtrer : uniquement dans la fenêtre des 2 mois à venir
-      if (predictedDate >= today && predictedDate <= endDate) {
-        // Statut couleur
-        let color = 'green';
-        if (daysRemaining <= 7) color = 'red';
-        else if (daysRemaining <= 14) color = 'orange';
-
-        upcoming.push({
-          date: predictedDate.toISOString().slice(0, 10), // format YYYY-MM-DD
-          immatriculation: vehicle.immatriculation,
-          marque: vehicle.marque,
-          modele: vehicle.modele,
-          type,
-          daysRemaining,
-          statut: color,
-          chauffeur: vehicle.chauffeur ? `${vehicle.chauffeur.nom} ${vehicle.chauffeur.prenom}` : 'Non assigné',
-          vehicleId: vehicle.id,
+      
+      if (daysRemaining !== undefined && daysRemaining <= daysWindow) {
+        upcomingMaintenances.push({
+          vehicle: vehicle,
+          type: type,
+          daysRemaining: daysRemaining,
+          nextThreshold: vehicle[`${type}NextThreshold`]
         });
       }
     });
   });
-
-  // Grouper par date pour le calendrier
-  const grouped = {};
-  upcoming.forEach(item => {
-    if (!grouped[item.date]) grouped[item.date] = [];
-    grouped[item.date].push(item);
-  });
-
-  // Retourner un tableau [{ date, entretiens: [...] }]
-  return Object.entries(grouped).map(([date, entretiens]) => ({ date, entretiens }));
+  
+  return upcomingMaintenances.sort((a, b) => a.daysRemaining - b.daysRemaining);
 }; 

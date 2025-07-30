@@ -38,8 +38,8 @@ const EntretiensBougies = () => {
   // Recalculer la liste à chaque changement de véhicules
   useEffect(() => {
     console.log('🔄 Recalcul des entretiens bougies avec', vehicles.length, 'véhicules');
-    const bougiesMaintenance = getNonUrgentMaintenance(vehicles, 'bougies');
-    const formattedData = formatMaintenanceData(bougiesMaintenance);
+    const maintenanceList = getNonUrgentMaintenance(vehicles, 'categorie_b');
+    const formattedData = formatMaintenanceData(maintenanceList);
     setMaintenanceData(formattedData);
     console.log('✅ Entretiens bougies calculés:', formattedData.length, 'entretiens');
   }, [vehicles]);
@@ -76,23 +76,13 @@ const EntretiensBougies = () => {
         />
       )}
 
-      <div className="flex justify-between items-center mb-6">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate('/entretiens')}
-            className="flex items-center gap-2 px-3 py-2 text-gray-600 hover:text-gray-800 transition"
-          >
-            <FaArrowLeft />
-            Retour
-          </button>
-          <h1 className="text-2xl font-semibold text-gray-800">Entretiens de Bougies</h1>
-        </div>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-800">Liste des entretiens Catégorie B</h1>
         <button
-          onClick={handleExportPDF}
-          className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+          onClick={() => navigate('/entretiens')}
+          className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors"
         >
-          <FaFilePdf />
-          Exporter en PDF
+          Retour
         </button>
       </div>
 

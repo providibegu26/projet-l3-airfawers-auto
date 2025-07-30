@@ -4,7 +4,6 @@ import { FaOilCan, FaPlug, FaCar, FaExclamationTriangle, FaTachometerAlt, FaChec
 import MileageModal from '../components/Entretiens/MileageModal';
 import { 
   fetchVehicles, 
-  calculateFleetAverage, 
   calculateMaintenanceStats, 
   getUrgentMaintenance,
   updateVehicleMileage,
@@ -71,7 +70,7 @@ const Entretiens = () => {
 
   const cards = [
     {
-      title: 'Vidange',
+      title: 'Catégorie A',
       icon: <FaOilCan className="text-xl" />,
       count: calculateMaintenanceStats(vehicles, 'vidange').length,
       bgColor: 'bg-blue-100',
@@ -80,18 +79,18 @@ const Entretiens = () => {
       route: '/entretiens/vidange'
     },
     {
-      title: 'Bougies',
+      title: 'Catégorie B',
       icon: <FaPlug className="text-xl" />,
-      count: calculateMaintenanceStats(vehicles, 'bougies').length,
+      count: calculateMaintenanceStats(vehicles, 'categorie_b').length,
       bgColor: 'bg-yellow-100',
       textColor: 'text-yellow-600',
       description: 'Entretiens prévus',
       route: '/entretiens/bougies'
     },
     {
-      title: 'Freins',
+      title: 'Catégorie C',
       icon: <FaCar className="text-xl" />,
-      count: calculateMaintenanceStats(vehicles, 'freins').length,
+      count: calculateMaintenanceStats(vehicles, 'categorie_c').length,
       bgColor: 'bg-red-100',
       textColor: 'text-red-600',
       description: 'Entretiens prévus',
@@ -180,19 +179,74 @@ const Entretiens = () => {
       </div>
 
       <div className="bg-white rounded-xl shadow p-6">
-        <h2 className="text-lg font-medium text-gray-800 mb-4">Informations de la flotte</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
-            <h3 className="text-sm font-medium text-blue-700">Véhicules en flotte</h3>
-            <p className="text-xl font-semibold text-blue-600">{vehicles.length}</p>
+        <h2 className="text-lg font-medium text-gray-800 mb-6">Catégories d'Entretien</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          
+          {/* Catégorie A */}
+          <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+            <h3 className="text-lg font-semibold text-blue-700 mb-3">Catégorie A</h3>
+            <ul className="space-y-2 text-sm text-blue-600">
+              <li className="flex items-start">
+                <span className="w-2 h-2 bg-blue-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                Huile moteur
+              </li>
+              <li className="flex items-start">
+                <span className="w-2 h-2 bg-blue-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                Filtre à huile
+              </li>
+              <li className="flex items-start">
+                <span className="w-2 h-2 bg-blue-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                Filtre à air
+              </li>
+              <li className="flex items-start">
+                <span className="w-2 h-2 bg-blue-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                Filtre à essence
+              </li>
+              <li className="flex items-start">
+                <span className="w-2 h-2 bg-blue-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                Contrôle des liquides
+              </li>
+            </ul>
           </div>
-          <div className="bg-green-50 border border-green-200 p-3 rounded-lg">
-            <h3 className="text-sm font-medium text-green-700">Moyenne hebdomadaire</h3>
-            <p className="text-xl font-semibold text-green-600">{calculateFleetAverage(vehicles)} km</p>
+
+          {/* Catégorie B */}
+          <div className="bg-orange-50 border border-orange-200 p-4 rounded-lg">
+            <h3 className="text-lg font-semibold text-orange-700 mb-3">Catégorie B</h3>
+            <div className="space-y-2 text-sm text-orange-600">
+              <p className="font-medium mb-2">Catégorie A +</p>
+              <ul className="space-y-2">
+                <li className="flex items-start">
+                  <span className="w-2 h-2 bg-orange-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                  Changement des bougies
+                </li>
+                <li className="flex items-start">
+                  <span className="w-2 h-2 bg-orange-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                  Plaquettes de freins
+                </li>
+                <li className="flex items-start">
+                  <span className="w-2 h-2 bg-orange-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                  Amortisseurs
+                </li>
+              </ul>
+            </div>
           </div>
-          <div className="bg-orange-50 border border-orange-200 p-3 rounded-lg">
-            <h3 className="text-sm font-medium text-orange-700">Entretiens urgents</h3>
-            <p className="text-xl font-semibold text-orange-600">{getUrgentMaintenance(vehicles).length}</p>
+
+          {/* Catégorie C */}
+          <div className="bg-red-50 border border-red-200 p-4 rounded-lg">
+            <h3 className="text-lg font-semibold text-red-700 mb-3">Catégorie C</h3>
+            <div className="space-y-2 text-sm text-red-600">
+              <p className="font-medium mb-2">Catégorie B +</p>
+              <ul className="space-y-2">
+                <li className="flex items-start">
+                  <span className="w-2 h-2 bg-red-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                  Suspensions
+                </li>
+                <li className="flex items-start">
+                  <span className="w-2 h-2 bg-red-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                  Pneus
+                </li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>

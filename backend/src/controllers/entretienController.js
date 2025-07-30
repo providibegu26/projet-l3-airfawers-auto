@@ -17,11 +17,21 @@ async function validateMaintenance(req, res) {
       return res.status(404).json({ error: 'Véhicule non trouvé' });
     }
 
-    // Sauvegarder l'entretien en base
+    // Mapping des nouveaux noms vers les anciens noms pour la sauvegarde
+    const typeMapping = {
+      'vidange': 'vidange',
+      'categorie_b': 'bougies',
+      'categorie_c': 'freins'
+    };
+
+    const oldType = typeMapping[type] || type;
+    console.log(`🔄 Mapping: ${type} → ${oldType}`);
+
+    // Sauvegarder l'entretien en base avec l'ancien nom
     const entretien = await prisma.historiqueEntretien.create({
       data: {
         vehiculeId: parseInt(vehiculeId),
-        type: type,
+        type: oldType,
         kilometrage: parseInt(kilometrage),
         description: description || `Entretien ${type} effectué`
       }
@@ -92,8 +102,63 @@ async function getAllMaintenanceHistory(req, res) {
   }
 }
 
+// Supprimer un entretien spécifique
+async function deleteMaintenance(req, res) {
+  try {
+    const { id } = req.params;
+    
+    console.log('🗑️ Suppression entretien:', { id });
+
+    // Vérifier que l'entretien existe
+    const entretien = await prisma.historiqueEntretien.findUnique({
+      where: { id: parseInt(id) }
+    });
+
+    if (!entretien) {
+      return res.status(404).json({ error: 'Entretien non trouvé' });
+    }
+
+    // Supprimer l'entretien
+    await prisma.historiqueEntretien.delete({
+      where: { id: parseInt(id) }
+    });
+
+    console.log('✅ Entretien supprimé:', entretien);
+    res.json({ 
+      message: 'Entretien supprimé avec succès',
+      deletedEntretien: entretien
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur suppression entretien:', error);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+// Vider tout l'historique des entretiens
+async function clearAllMaintenance(req, res) {
+  try {
+    console.log('🗑️ Vidage de tout l\'historique des entretiens');
+
+    // Supprimer tous les entretiens
+    const result = await prisma.historiqueEntretien.deleteMany({});
+
+    console.log('✅ Historique vidé:', result.count, 'entretiens supprimés');
+    res.json({ 
+      message: `Historique vidé avec succès (${result.count} entretiens supprimés)`,
+      deletedCount: result.count
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur vidage historique:', error);
+    res.status(500).json({ error: error.message });
+  }
+}
+
 module.exports = {
   validateMaintenance,
   getMaintenanceHistory,
-  getAllMaintenanceHistory
+  getAllMaintenanceHistory,
+  deleteMaintenance,
+  clearAllMaintenance
 }; 
